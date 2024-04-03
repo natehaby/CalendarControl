@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Collections;
@@ -33,8 +32,8 @@ public partial class CalendarControl : ContentControl
 	public static readonly StyledProperty<DayOfWeek> FirstDayOfWeekProperty = AvaloniaProperty.Register<CalendarControl, DayOfWeek>(nameof(FirstDayOfWeek), DateTimeHelper.GetCurrentDateFormat().FirstDayOfWeek);
 	/// <summary>Items property</summary>
 	public static readonly DirectProperty<CalendarControl, IEnumerable> ItemsProperty = AvaloniaProperty.RegisterDirect<CalendarControl, IEnumerable>(nameof(Items), o => o.Items, (o, v) => o.Items = v);
-	/// <summary>Current week property</summary>
-	public static readonly DirectProperty<CalendarControl, DateTime> CurrentWeekProperty = AvaloniaProperty.RegisterDirect<CalendarControl, DateTime>(nameof(CurrentWeek), o => o.CurrentWeek, (o, v) => o.CurrentWeek = v);
+	/// <summary>The selected date</summary>
+	public static readonly DirectProperty<CalendarControl, DateOnly> SelectedDateProperty = AvaloniaProperty.RegisterDirect<CalendarControl, DateOnly>(nameof(SelectedDate), o => o.SelectedDate, (o,v) => o.SelectedDate = v);
 	/// <summary>The begin of the day property</summary>
 	public static readonly DirectProperty<CalendarControl, TimeSpan> BeginOfTheDayProperty = AvaloniaProperty.RegisterDirect<CalendarControl, TimeSpan>(nameof(BeginOfTheDay), o => o.BeginOfTheDay, (o, v) => o.BeginOfTheDay = v);
 	/// <summary>The end of the day property</summary>
@@ -46,11 +45,23 @@ public partial class CalendarControl : ContentControl
 	/// <summary>The selected item property</summary>
 	public static readonly StyledProperty<object?> SelectedItemProperty = AvaloniaProperty.Register<CalendarControl, object?>(nameof(SelectedItem));
 	/// <summary>Weekend is visible property</summary>
-	public static readonly DirectProperty<CalendarControl, bool> WeekendIsVisibleProperty = AvaloniaProperty.RegisterDirect<CalendarControl, bool>(nameof(WeekendIsVisible), o => o.WeekendIsVisible, (o, v) => o.WeekendIsVisible = v);
+	//public static readonly DirectProperty<CalendarControl, bool> WeekendIsVisibleProperty = AvaloniaProperty.RegisterDirect<CalendarControl, bool>(nameof(WeekendIsVisible), o => o.WeekendIsVisible, (o, v) => o.WeekendIsVisible = v);
 	/// <summary>Use default items template property</summary>
 	public static readonly DirectProperty<CalendarControl, bool> UseDefaultItemsTemplateProperty = AvaloniaProperty.RegisterDirect<CalendarControl, bool>(nameof(UseDefaultItemsTemplate), o => o.UseDefaultItemsTemplate, (o, v) => o.UseDefaultItemsTemplate = v);
 	/// <summary>The selection changed event</summary>
 	public static readonly RoutedEvent<CalendarSelectionChangedEventArgs> SelectionChangedEvent = RoutedEvent.Register<CalendarControl, CalendarSelectionChangedEventArgs>(nameof(SelectionChanged), RoutingStrategies.Bubble);
+	///<summary>Days to view</summary>
+	public static readonly DirectProperty<CalendarControl, DisplayMode> ModeProperty = AvaloniaProperty.RegisterDirect<CalendarControl, DisplayMode>(nameof(Mode), o => o.Mode, (o, v) => o.Mode = v);
+	/// <summary>Position of selected date. Only works with Day View.</summary>
+	/// <remarks>When using Center with Day Mode and an even number of Days, the selected date will be left of center</remarks>
+	public static readonly DirectProperty<CalendarControl, DisplayPosition> SelectedDatePositionProperty = AvaloniaProperty.RegisterDirect<CalendarControl, DisplayPosition>(nameof(SelectedDatePosition), o => o.SelectedDatePosition, (o,v) => o.SelectedDatePosition = v);
+	///<summary>Days to show in Day View</summary>
+	public static readonly DirectProperty<CalendarControl, int> DaysProperty = AvaloniaProperty.RegisterDirect<CalendarControl, int>(nameof(Days), o => o.Days, (o, v) => o.Days = v);
+
+	/// <summary>
+	/// The maximum number of days that can be displayed when <see cref="Mode" is set to Day./> 
+	/// </summary> 
+	private const int MAX_DAYS = 10;
 
 	/// <summary>Initializes static members of the <see cref="CalendarControl" /> class</summary>
 	static CalendarControl()
@@ -59,11 +70,12 @@ public partial class CalendarControl : ContentControl
 
 		ItemsProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.ItemsChanged(e));
 		BeginOfTheDayProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.BeginOfTheDayChanged(e));
-		CurrentWeekProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.CurrentWeekChanged(e));
+		SelectedDateProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.SelectedDateChanged(e));
 		EndOfTheDayProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.EndOfTheDayChanged(e));
 		SelectedIndexProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.SelectedIndexChanged(e));
 		SelectedItemProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.SelectedItemChanged(e));
-		WeekendIsVisibleProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.WeekendIsVisibleChanged(e));
+		ModeProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.ModeChanged(e));
+		DaysProperty.Changed.AddClassHandler<CalendarControl>((x, e) => x.DaysChanged(e));
 	}
 
 	/// <summary>
@@ -79,8 +91,19 @@ public partial class CalendarControl : ContentControl
 		dayGrid = this.FindControl<Grid>("DayGrid");
 		hourGrid = this.FindControl<Grid>("HourGrid");
 
-        scrollViewerMain?.GetObservable(BoundsProperty).Subscribe(OnScrollViewerBoundsChanged);
-		CreateWeek(CurrentWeek);
+		scrollViewerMain?.GetObservable(BoundsProperty).Subscribe(OnScrollViewerBoundsChanged);
+
+#if DEBUG
+		// Sanity checks
+		if (itemsGrid == null) throw new NotImplementedException("ItemsGrid not found");
+		if (scrollViewerMain == null) throw new NotImplementedException("ScrollViewerMain not found");
+		if (scrollableGrid == null) throw new NotImplementedException("ScrollableGrid not found");
+		if (weekGrid == null) throw new NotImplementedException("WeekGrid not found");
+		if (dayGrid == null) throw new NotImplementedException("DayGrid not found");
+		if (hourGrid == null) throw new NotImplementedException("HourGrid not found");
+#endif
+
+		DrawCalendar();
 		UpdateItems(Items, SelectedIndex);
 	}
 
@@ -94,16 +117,6 @@ public partial class CalendarControl : ContentControl
 	public DayOfWeek FirstDayOfWeek { get => GetValue(FirstDayOfWeekProperty); set => SetValue(FirstDayOfWeekProperty, value); }
 	/// <summary>Items property</summary>
 	public IEnumerable Items { get => items; set => SetAndRaise(ItemsProperty, ref items, value); }
-	/// <summary>Current week property</summary>
-	public DateTime CurrentWeek
-	{
-		get => currentWeek;
-		set
-		{
-			if (currentWeek.GetBeginWeek(FirstDayOfWeek) == value.GetBeginWeek(FirstDayOfWeek)) return;
-			SetAndRaise(CurrentWeekProperty, ref currentWeek, value);
-		}
-	}
 	/// <summary>Begin of the day property</summary>
 	public TimeSpan BeginOfTheDay { get => beginOfTheDay; set => SetAndRaise(BeginOfTheDayProperty, ref beginOfTheDay, value); }
 	/// <summary>End of the day property</summary>
@@ -114,12 +127,66 @@ public partial class CalendarControl : ContentControl
 	public int SelectedIndex { get => GetValue(SelectedIndexProperty); set => SetValue(SelectedIndexProperty, value); }
 	/// <summary>Selected item</summary>
 	public object? SelectedItem { get => GetValue(SelectedItemProperty); set => SetValue(SelectedItemProperty, value); }
+	/// <summary>Date shown on Calendar.</summary>
+	public DateOnly SelectedDate { get => selectedDate; set => SetAndRaise(SelectedDateProperty, ref selectedDate, value); }
 	/// <summary>Use default items template property</summary>
 	public bool UseDefaultItemsTemplate { get => useDefaultItemsTemplate; set => SetAndRaise(UseDefaultItemsTemplateProperty, ref useDefaultItemsTemplate, value); }
-	/// <summary>Weekend is visible property</summary>
-	public bool WeekendIsVisible { get => weekendIsVisible; set => SetAndRaise(WeekendIsVisibleProperty, ref weekendIsVisible, value); }
-    /// <summary>Occurs when selection changed</summary>
-    public event EventHandler<CalendarSelectionChangedEventArgs> SelectionChanged { add => AddHandler(SelectionChangedEvent, value); remove => RemoveHandler(SelectionChangedEvent, value); }
+	/// <summary>Occurs when selection changed</summary>
+	public event EventHandler<CalendarSelectionChangedEventArgs> SelectionChanged { add => AddHandler(SelectionChangedEvent, value); remove => RemoveHandler(SelectionChangedEvent, value); }
+	/// <summary>The display mode - Days, Weeks, or Workweek./summary>
+	public DisplayMode Mode { get => mode; set => SetAndRaise(ModeProperty, ref mode, value);}
+	/// <summary>Position to show the selcted date in Day Mode </summary>
+	public DisplayPosition SelectedDatePosition { get => selectedDatePosition; set => SetAndRaise(SelectedDatePositionProperty, ref selectedDatePosition, value); }
+	///<summary>The number of days to display in Day Mode</summary>
+	public int Days { get => days; set => SetAndRaise(DaysProperty, ref days, value); }
+
+
+	/// <summary>
+	/// Calculates the first date displayed based on the <see cref="SelectedDate"/>, <see cref="Mode"/>, and <see cref="SelectedDatePosition"/>.
+	/// </summary>
+	/// <returns>In week/workweek modes, the first day of the (work)week. 
+	/// In Day mode, it will return the first date that positions the <see cref="SelectedDate"/> at the position specified by <see cref="SelectedDatePosition"/></returns>
+	public DateOnly StartDate()
+	{
+		if(SelectedDate == DateOnly.MinValue)
+		{
+			throw new Exception("SelectedDate is not set");
+		}
+		
+		if (Mode == DisplayMode.Day && Days == 1) return SelectedDate;
+
+		if(Mode == DisplayMode.Week)
+		{
+            if (SelectedDate.DayOfWeek == FirstDayOfWeek) return SelectedDate;
+			int x = -(int)SelectedDate.DayOfWeek + (int)FirstDayOfWeek;
+            return SelectedDate.AddDays(x);
+		}
+
+		if (Mode == DisplayMode.WorkWeek)
+		{
+			if(SelectedDate.DayOfWeek == FirstDayOfWeek) return SelectedDate;
+			var start = SelectedDate.AddDays(-(int)SelectedDate.DayOfWeek + (int)FirstDayOfWeek);
+			if(start.DayOfWeek == DayOfWeek.Sunday) return start.AddDays(1);
+			
+			return start;
+		}
+
+		if(Days > MAX_DAYS) throw new ArgumentException($"Days cannot be greater than {MAX_DAYS}");
+
+		if (SelectedDatePosition == DisplayPosition.Center)
+		{
+	        var start = SelectedDate.AddDays((-Days / 2) + 1);
+		    return start;
+        }
+
+        if (SelectedDatePosition == DisplayPosition.Right)
+        {
+            return SelectedDate.AddDays((-Days) + 1);
+        }
+
+        // Only DisplayPosition.Left should be remaining.
+        return SelectedDate;
+	}
 
 	/// <summary>
 	/// Scrolls the specified item into view.
@@ -129,6 +196,17 @@ public partial class CalendarControl : ContentControl
 	{
 		var list = GetItemsAsList();
 		if (index < 0 || index >= list.Count) return;
+
+		// Get the item in a form we can use.
+		var item = Convert(list[index]!, index)?.GetFirstLogicalDescendant<IAppointmentControl>();
+		if (item is null) return;
+
+		// If it isn't visible, move our visible days so it is visible.
+		if (!IsDateVisible(DateOnly.FromDateTime(item.Begin)))
+		{
+			SelectedDate = DateOnly.FromDateTime(item.Begin);
+		}
+
 		InnerScrollIntoView(index);
 	}
 
@@ -141,7 +219,7 @@ public partial class CalendarControl : ContentControl
 		var list = GetItemsAsList();
 		var index = list.IndexOf(item);
 		if (index < 0 || index >= list.Count) return;
-		InnerScrollIntoView(index);
+		ScrollIntoView(index);
 	}
 
 	/// <inheritdoc />
@@ -215,9 +293,7 @@ public partial class CalendarControl : ContentControl
 	void PreviousDayButtonClick(object? sender, RoutedEventArgs e)
 #pragma warning restore RCS1213
 	{
-		if (scrollViewerMain == null) return;
-		var (x, y) = scrollViewerMain.Offset;
-		scrollViewerMain.ScrollWithoutBinding(new Vector(x - dayInOffset, y));
+		SelectedDate = SelectedDate.AddDays(-DaysToMove);
 	}
 
 	/// <summary>
@@ -229,9 +305,10 @@ public partial class CalendarControl : ContentControl
 	void NextDayButtonClick(object? sender, RoutedEventArgs e)
 #pragma warning restore RCS1213
 	{
-		if (scrollViewerMain == null) return;
-		var (x, y) = scrollViewerMain.Offset;
-		scrollViewerMain.ScrollWithoutBinding(new Vector(x + dayInOffset, y));
+		//if (scrollViewerMain == null) return;
+		//var (x, y) = scrollViewerMain.Offset;
+		//scrollViewerMain.ScrollWithoutBinding(new Vector(x + dayInOffset, y));
+		SelectedDate = SelectedDate.AddDays(DaysToMove);
 	}
 
 	/// <summary>
@@ -281,11 +358,33 @@ public partial class CalendarControl : ContentControl
 	/// <returns></returns>
 	IList GetItemsAsList() => Items as IList ?? Items.ToList();
 
+    /// <summary>
+	/// The number of days to show based on the current Mode and Days property
+	/// </summary>
+	int DaysToShow => Mode switch
+	{
+        DisplayMode.Day => Days,
+        DisplayMode.WorkWeek => 5,
+		DisplayMode.Week => 7,
+        _ => throw new ArgumentException("Invalid mode")
+    };
+
 	/// <summary>
-	/// Scroll viewer bounds changed: adjust scrollable grid as well
-	/// /// </summary>
-	/// <param name="rect">Rectangle of the scroll viewer</param>
-	void OnScrollViewerBoundsChanged(Rect rect) => UpdateScrollViewer(rect, BeginOfTheDay, EndOfTheDay, WeekendIsVisible, false);
+	/// The number of days to move when clicking the next or previous button
+	/// </summary>
+	int DaysToMove => Mode switch
+	{
+		DisplayMode.Day => Days,
+		DisplayMode.WorkWeek => 7,
+		DisplayMode.Week => 7,
+		_ => throw new ArgumentException("Invalid mode")
+	};
+
+/// <summary>
+/// Scroll viewer bounds changed: adjust scrollable grid as well
+/// </summary>
+/// <param name="rect">Rectangle of the scroll viewer</param>
+void OnScrollViewerBoundsChanged(Rect rect) => UpdateScrollViewer(rect, BeginOfTheDay, EndOfTheDay, false);
 
 	/// <summary>
 	/// Update the scroll viewers
@@ -295,40 +394,42 @@ public partial class CalendarControl : ContentControl
 	/// <param name="endOfDay">The end of the day</param>
 	/// <param name="weekendVisible">The weekend is visible flag</param>
 	/// <param name="forceScroll">Force to scroll or not</param>
-	void UpdateScrollViewer(Rect rect, TimeSpan beginOfDay, TimeSpan endOfDay, bool weekendVisible, bool forceScroll)
+	void UpdateScrollViewer(Rect rect, TimeSpan beginOfDay, TimeSpan endOfDay, bool forceScroll)
 	{
 		if (scrollableGrid == null || scrollViewerMain == null) return;
 		if (rect.Width < 0 || rect.Height < 0) return;
 
 		var x = double.NaN;
 		var y = double.NaN;
-		if (beginOfDay.TotalDays >= 0.0d && endOfDay.TotalDays < 24.0d && endOfDay > beginOfDay)
+		if (beginOfDay.TotalHours >= 0.0d && endOfDay.TotalHours < 24.0d && endOfDay > beginOfDay)
 		{
-			var height = 1.0d / (endOfDay - beginOfDay).TotalDays * rect.Height;
+			var height = 1.0d / (endOfDay - beginOfDay).TotalHours * rect.Height;
 			scrollableGrid.Height = height;
 
-			y = forceScroll || scrollViewerMain.Offset.Y == 0.0d ? beginOfDay.TotalDays * height : scrollViewerMain.Offset.Y;
+			y = forceScroll || scrollViewerMain.Offset.Y == 0.0d ? beginOfDay.TotalHours * height : scrollViewerMain.Offset.Y;
 		}
 		else
 		{
 			scrollableGrid.Height = rect.Height;
 		}
-		var visibleDaysPerWeek = GetDaysPerWeek(weekendVisible);
-		if (visibleDaysPerWeek.Count != DaysPerWeek)
-		{
-			var width = DaysPerWeek / (double)visibleDaysPerWeek.Count * rect.Width;
-			scrollableGrid.Width = width;
 
-			var allDaysPerWeek = GetDaysPerWeek(true);
-			var offsetFrac = (visibleDaysPerWeek[0] - allDaysPerWeek[0]) / (double)DaysPerWeek;
+		//HACK: My Changes
+		//var visibleDaysPerWeek = GetDaysPerWeek(weekendVisible);
+		//if (visibleDaysPerWeek.Count != DaysPerWeek)
+		//{
+		//	var width = DaysPerWeek / (double)visibleDaysPerWeek.Count * rect.Width;
+		//	scrollableGrid.Width = width;
 
-			x = forceScroll || scrollViewerMain.Offset.X == 0.0d ? offsetFrac * width : scrollViewerMain.Offset.X;
-			dayInOffset = 1 / (double)DaysPerWeek * width;
-		}
-		else
-		{
+		//	var allDaysPerWeek = GetDaysPerWeek(true);
+		//	var offsetFrac = (visibleDaysPerWeek[0] - allDaysPerWeek[0]) / (double)DaysPerWeek;
+
+		//	x = forceScroll || scrollViewerMain.Offset.X == 0.0d ? offsetFrac * width : scrollViewerMain.Offset.X;
+		//	dayInOffset = 1 / (double)DaysPerWeek * width;
+		//}
+		//else
+		//{
 			scrollableGrid.Width = rect.Width;
-		}
+		//}
 
 		if (double.IsNaN(x) && double.IsNaN(y)) return;
 		x = !double.IsNaN(x) ? x : 0.0d;
@@ -338,37 +439,52 @@ public partial class CalendarControl : ContentControl
 	}
 
 	/// <summary>
+	/// Checks if the given date is currently visible.
+	/// </summary>
+	/// <param name="date">The date to check</param>
+	/// <returns>True if the date is visible, false if not.</returns>
+	public bool IsDateVisible(DateOnly date)
+	{
+        var begin = StartDate();
+        var end = begin.AddDays(DaysToShow);
+        return date >= begin && date < end;
+    }
+
+	/// <summary>
 	/// Scrolls the specified item into view.
 	/// </summary>
 	/// <param name="index">Index of the item</param>
 	void InnerScrollIntoView(int index)
 	{
-		if (scrollableGrid == null || scrollViewerMain == null) return;
+        if (scrollableGrid == null || scrollViewerMain == null) return;
+        
 		var control = Convert(GetItemsAsList()[index], index);
+        
 		if (control == null) return;
-		var item = control.GetFirstLogicalDescendant<IAppointmentControl>();
-		CurrentWeek = item.Begin;
 
-		var scrollViewerMainRect = scrollViewerMain.Bounds;
+        var item = control.GetFirstLogicalDescendant<IAppointmentControl>();
+
+        var scrollViewerMainRect = scrollViewerMain.Bounds;
 		var scrollableGridRect = scrollableGrid.Bounds;
 
-		var beginWeek = CurrentWeek.GetBeginWeek(FirstDayOfWeek);
+		var beginWeek = StartDate().ToDateTime(TimeOnly.MinValue);
 		var beginDate = item.Begin.Date;
-		var daysOffset = beginDate - beginWeek;
+        var daysOffset = beginDate - beginWeek;
 
-		var begin = (item.Begin - beginDate).TotalDays;
-		var x = daysOffset.TotalDays / DaysPerWeek * scrollableGridRect.Width;
+
+        var begin = (item.Begin - beginDate).TotalDays;
+		var x = daysOffset.TotalDays / DaysToShow * scrollableGridRect.Width;
 		var y = begin * scrollableGridRect.Height;
 		var v = new Vector(x, y);
 		if (!GeometryHelper.IsInRect(v, new Rect(scrollViewerMain.Offset.X, scrollViewerMain.Offset.Y, scrollViewerMainRect.Width, scrollViewerMainRect.Height)))
 			scrollViewerMain.ScrollWithoutBinding(v);
 	}
 
-	/// <summary>
-	/// Sets the selection bit for the selected appointment.
-	/// </summary>
-	/// <param name="selectedIndex">Index of the selected item</param>
-	void SetSelection(int selectedIndex)
+    /// <summary>
+    /// Sets the selection bit for the selected appointment.
+    /// </summary>
+    /// <param name="selectedIndex">Index of the selected item</param>
+    void SetSelection(int selectedIndex)
 	{
 		if (itemsGrid == null) return;
 		var appointments = itemsGrid.GetLogicalDescendants().OfType<IAppointmentControl>().ToList();
@@ -390,9 +506,13 @@ public partial class CalendarControl : ContentControl
 		// Add handler for newValue.CollectionChanged (if possible)
 		if (e.NewValue is INotifyCollectionChanged newValueINotifyCollectionChanged)
 			collectionChangeSubscription = newValueINotifyCollectionChanged.WeakSubscribe(ItemsCollectionChanged);
+
 		if (skipItemsChanged) return;
+		
 		ClearItemsGrid();
+		
 		if (e.NewValue is not IEnumerable value) return;
+		
 		UpdateItems(value, SelectedIndex);
 	}
 
@@ -404,19 +524,22 @@ public partial class CalendarControl : ContentControl
 	{
 		if (scrollViewerMain == null) return;
 		if (e.NewValue is not TimeSpan value) return;
-		UpdateScrollViewer(scrollViewerMain.Bounds, value, EndOfTheDay, WeekendIsVisible, true);
+		UpdateScrollViewer(scrollViewerMain.Bounds, value, EndOfTheDay, true);
 	}
 
 	/// <summary>
-	/// Current week changed event
+	/// Selected date changed event
 	/// </summary>
 	/// <param name="e">Argument for the event</param>
-	void CurrentWeekChanged(AvaloniaPropertyChangedEventArgs e)
+	void SelectedDateChanged(AvaloniaPropertyChangedEventArgs e)
 	{
-		if (e.NewValue is not DateTime value) return;
-		CreateWeek(value);
+		if (e.NewValue is not DateOnly value) return;
+		if ((DateOnly)e.NewValue == DateOnly.MinValue) return;
+		
+		DrawCalendar();
 		UpdateItems(Items, SelectedIndex);
 	}
+
 
 	/// <summary>
 	/// End of the day changed event
@@ -426,7 +549,7 @@ public partial class CalendarControl : ContentControl
 	{
 		if (scrollViewerMain == null) return;
 		if (e.NewValue is not TimeSpan value) return;
-		UpdateScrollViewer(scrollViewerMain.Bounds, BeginOfTheDay, value, WeekendIsVisible, true);
+		UpdateScrollViewer(scrollViewerMain.Bounds, BeginOfTheDay, value, true);
 	}
 
 	/// <summary>
@@ -438,9 +561,8 @@ public partial class CalendarControl : ContentControl
 	{
 		if (e.NewItems == null) return;
 		var newItems = Convert(e.NewItems);
-		var beginWeek = currentWeek.GetBeginWeek(FirstDayOfWeek);
-		var weekList = newItems.Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInWeek(beginWeek)).ToList();
-		if (weekList.Count == 0) return;
+		var visibleItems = newItems.Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInRange(StartDate().ToDateTime(TimeOnly.MinValue), TimeSpan.FromDays(DaysToShow))).ToList();
+		if (visibleItems.Count == 0) return;
 		UpdateItems(Items, SelectedIndex);
 	}
 
@@ -470,15 +592,39 @@ public partial class CalendarControl : ContentControl
 	}
 
 	/// <summary>
+	/// The mode has changed.
+	/// </summary>
+	/// <param name="e">Argument for the view</param>
+	void ModeChanged(AvaloniaPropertyChangedEventArgs e)
+	{
+		DrawCalendar();
+		UpdateItems(Items, SelectedIndex);
+	}
+
+	/// <summary>
+	/// The number of days to display has changed.
+	/// </summary>
+	/// <param name="e"></param>
+	void DaysChanged(AvaloniaPropertyChangedEventArgs e)
+	{
+		if (Mode != DisplayMode.Day) return;
+		if ((int)e.NewValue < 1) return;
+		if ((int)e.NewValue > MAX_DAYS) throw new ArgumentException($"Days must be between 1 and {MAX_DAYS}. Value: {e.NewValue}");
+
+		DrawCalendar();
+		UpdateItems(Items, SelectedIndex);
+    }	
+
+	/// <summary>
 	/// Current week changed event
 	/// </summary>
 	/// <param name="e">Argument for the event</param>
-	void WeekendIsVisibleChanged(AvaloniaPropertyChangedEventArgs e)
-	{
-		if (scrollViewerMain == null) return;
-		if (e.NewValue is not bool value) return;
-		UpdateScrollViewer(scrollViewerMain.Bounds, BeginOfTheDay, EndOfTheDay, value, true);
-	}
+	//void WeekendIsVisibleChanged(AvaloniaPropertyChangedEventArgs e)
+	//{
+	//	if (scrollViewerMain == null) return;
+	//	if (e.NewValue is not bool value) return;
+	//	UpdateScrollViewer(scrollViewerMain.Bounds, BeginOfTheDay, EndOfTheDay, value, true);
+	//}
 
 	/// <summary>
 	/// Raises the selection changed event
@@ -522,23 +668,27 @@ public partial class CalendarControl : ContentControl
 	void UpdateItems(IEnumerable enumerable, int selectedIndex)
 	{
 		if (itemsGrid == null) return;
-		var internalItems = Convert(enumerable);
-		var beginWeek = currentWeek.GetBeginWeek(FirstDayOfWeek);
-		var weekList = internalItems.
-		Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInWeek(beginWeek)).
-		OrderBy(x => x.GetFirstLogicalDescendant<IAppointmentControl>().Begin).ToList();
-		var visibleDaysPerWeek = GetDaysPerWeek(true);
-		foreach (var i in visibleDaysPerWeek)
-		{
-			if (itemsGrid.Children[i - visibleDaysPerWeek[0]] is not Grid dayColumn) continue;
 
-			var todayList = weekList.Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInDay(beginWeek.AddDays(i))).ToList();
+		if (SelectedDate == DateOnly.MinValue) return;	
+
+		var internalItems = Convert(enumerable);
+		var startDate = StartDate().ToDateTime(TimeOnly.MinValue);
+		var visibleItems = internalItems.
+			Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInRange(StartDate().ToDateTime(TimeOnly.MinValue), TimeSpan.FromDays(DaysToShow))).
+			OrderBy(x => x.GetFirstLogicalDescendant<IAppointmentControl>().Begin).ToList();
+	
+		for (var i = 0; i < DaysToShow; i++)
+		{
+			if (itemsGrid.Children[i] is not Grid dayColumn) continue;
+
+			var todayList = visibleItems.Where(x => x.GetFirstLogicalDescendant<IAppointmentControl>().IsInDay(startDate.AddDays(i))).ToList();
 			AppointmentControlListHelper.ApplyIndentation(todayList);
 			var rowDefinitions = new RowDefinitions();
 
 			var previousEnd = double.NaN;
 			var dayControls = new List<Control?>();
 			var j = 0;
+
 			while (j < todayList.Count)
 			{
 				var item = todayList[j].GetFirstLogicalDescendant<IAppointmentControl>();
@@ -688,15 +838,15 @@ public partial class CalendarControl : ContentControl
 		if (itemsGrid == null) return;
 		itemsGrid.Children.Clear();
 		var columnDefinitions = new ColumnDefinitions();
-		var visibleDaysPerWeek = GetDaysPerWeek(true);
+		//var visibleDaysPerWeek = GetDaysPerWeek(true);
 		List<Grid> dayColumnsToAdd = new();
-		foreach (var i in visibleDaysPerWeek)
+		for(int i = 0; i < DaysToShow; i++)
 		{
 			var dayColumn = ControlFactory.CreateColumn();
 			dayColumn.RowDefinitions = new RowDefinitions();
 			columnDefinitions.Add(new ColumnDefinition(1.0d, GridUnitType.Star));
 			dayColumnsToAdd.Add(dayColumn);
-			Grid.SetColumn(dayColumn, i - visibleDaysPerWeek[0]);
+			Grid.SetColumn(dayColumn, i);
 		}
 
 		itemsGrid.Children.AddRange(dayColumnsToAdd);
@@ -704,98 +854,81 @@ public partial class CalendarControl : ContentControl
 	}
 
 	/// <summary>
-	/// Gets the days per week list. It excludes the 'weekend' if applicable.
+	/// Draws the calendar grid
 	/// </summary>
-	/// <param name="weekendVisible">The weekend is visible flag</param>
-	/// <returns>Days per week</returns>
-	IList<int> GetDaysPerWeek(bool weekendVisible)
-	{
-		var result = new List<int>();
-		var firstDayOfWeek = FirstDayOfWeek;
-		for (var i = 0; i < DaysPerWeek; i++)
-		{
-			var day = DayOfWeekHelper.AddDay(firstDayOfWeek, i);
-			if (weekendVisible)
-			{
-				result.Add(i);
-			}
-			else
-			{
-				var dayState = DateTimeHelper.GetDayState(CultureInfo.CurrentCulture, day);
-				if (dayState == DateTimeHelper.DayState.Weekend)
-					continue;
-				result.Add(i);
-			}
-		}
-		return result;
-	}
-
-	/// <summary>
-	/// Creates the week UI for the given current week
-	/// </summary>
-	/// <param name="week">The current week</param>
-	void CreateWeek(DateTime week)
+	void DrawCalendar()
 	{
 		if (weekGrid == null) return;
+		if (SelectedDate == DateOnly.MinValue) return;
+
 		CreateHourTexts();
-		CreateDayTexts(week);
 
-		weekGrid.Children.Clear();
+        CreateDayTexts();
 
-		var columnDefinitions = new ColumnDefinitions();
-		var firstDayOfWeek = FirstDayOfWeek;
-		var visibleDaysPerWeek = GetDaysPerWeek(true);
-		List<Control> weekItemsToAdd = new();
-		foreach (var i in visibleDaysPerWeek)
-		{
-			var day = DayOfWeekHelper.AddDay(firstDayOfWeek, i);
-			var dayState = ControlFactory.CreateDayState(day);
-			var dayColumn = ControlFactory.CreateColumn();
-			var rowDefinitions = new RowDefinitions();
-			List<Border> hourCellToAdd = new();
+        weekGrid.Children.Clear();
+
+        var columnDefinitions = new ColumnDefinitions();
+
+        List<Control> dayToAdd = new();
+
+        var start = StartDate();
+
+        for (int i = 0; i < DaysToShow; i++)
+        {
+            var date = start.AddDays(i);
+            var dayState = ControlFactory.CreateDayState(date.DayOfWeek);
+            var dayColumn = ControlFactory.CreateColumn();
+
+            var rowDefinitions = new RowDefinitions();
+			var hourCellToAdd = new List<Border>();
+            
 			for (var j = 0; j < HoursPerDay; j++)
-			{
-				var hourCell = ControlFactory.CreateHourCell();
-				hourCellToAdd.Add(hourCell);
-				Grid.SetRow(hourCell, j);
-				rowDefinitions.Add(new RowDefinition(1.0d, GridUnitType.Star));
-			}
+            {
+                var hourCell = ControlFactory.CreateHourCell();
+                hourCellToAdd.Add(hourCell);
+                Grid.SetRow(hourCell, j);
+                rowDefinitions.Add(new RowDefinition(1.0d, GridUnitType.Star));
+            }
 
-			dayColumn.Children.AddRange(hourCellToAdd);
-			dayColumn.RowDefinitions = rowDefinitions;
+            dayColumn.Children.AddRange(hourCellToAdd);
+            dayColumn.RowDefinitions = rowDefinitions;
+            
 			columnDefinitions.Add(new ColumnDefinition(1.0d, GridUnitType.Star));
-			weekItemsToAdd.Add(dayState);
-			weekItemsToAdd.Add(dayColumn);
-			Grid.SetColumn(dayColumn, i - visibleDaysPerWeek[0]);
-			Grid.SetColumn(dayState, i - visibleDaysPerWeek[0]);
-		}
+            
+			dayToAdd.Add(dayState);
+            dayToAdd.Add(dayColumn);
+            
+			Grid.SetColumn(dayColumn, i);
+            Grid.SetColumn(dayState, i);
+        }
 
-		weekGrid.Children.AddRange(weekItemsToAdd);
-		weekGrid.ColumnDefinitions = columnDefinitions;
-		ClearItemsGrid();
-	}
-
+        weekGrid.Children.AddRange(dayToAdd);
+        weekGrid.ColumnDefinitions = columnDefinitions;
+        ClearItemsGrid();
+    }
+		
 	/// <summary>
 	/// Creates the day texts
 	/// </summary>
-	/// <param name="week">The current week</param>
-	void CreateDayTexts(DateTime week)
+	void CreateDayTexts()
 	{
 		if (dayGrid == null) return;
 		dayGrid.Children.Clear();
-		var columnDefinitions = new ColumnDefinitions();
-		var firstDayOfWeek = FirstDayOfWeek;
-		var beginWeek = week.GetBeginWeek(firstDayOfWeek);
-		var visibleDaysPerWeek = GetDaysPerWeek(true);
+
+		ColumnDefinitions columnDefinitions = new();
+		
 		List<TextBlock> dayTextsToAdd = new();
-		foreach (var i in visibleDaysPerWeek)
+		
+		DateOnly start = StartDate();
+
+		for(int i = 0; i < DaysToShow; i++)
 		{
-			var day = DayOfWeekHelper.AddDay(firstDayOfWeek, i);
-			var text = DateTimeHelper.DayOfWeekToString(day) + " " + beginWeek.AddDays(i).Day;
+			DateOnly dateOnly = start.AddDays(i);
+			var text = DateTimeHelper.DayOfWeekToString(dateOnly.DayOfWeek) + " " + dateOnly.Day;
 			var dayText = new TextBlock { Text = text };
 			columnDefinitions.Add(new ColumnDefinition(1.0d, GridUnitType.Star));
 			dayTextsToAdd.Add(dayText);
-			Grid.SetColumn(dayText, i - visibleDaysPerWeek[0]);
+			Grid.SetColumn(dayText, i);
 		}
 
 		dayGrid.Children.AddRange(dayTextsToAdd);
@@ -835,18 +968,22 @@ public partial class CalendarControl : ContentControl
 		ScrollIntoView(index);
 	}
 
-	/// <summary>Days per week</summary>
-	const int DaysPerWeek = 7;
 	/// <summary>Hours per day</summary>
 	const int HoursPerDay = 24;
 	/// <summary>Auto scroll to selected item</summary>
 	bool autoScrollToSelectedItem;
 	/// <summary>Allow delete</summary>
 	bool allowDelete;
+	/// <summary>Days</summary>
+	int days = 1;
+	/// <summary>Selected Date</summary>
+	DateOnly selectedDate = DateOnly.FromDateTime(DateTime.Now);	
+	/// <summary>Sets the display mode. <see cref="DisplayMode"/></summary>
+	DisplayMode mode = DisplayMode.Week;
+	/// <summary>Selected date position <see cref="DisplayPosition"/></summary>
+	DisplayPosition selectedDatePosition = DisplayPosition.Left;
 	/// <summary>Begin of the day</summary>
 	TimeSpan beginOfTheDay = new(0, 0, 0);
-	/// <summary>Current week</summary>
-	DateTime currentWeek = DateTime.Now;
 	/// <summary>End of the day</summary>
 	TimeSpan endOfTheDay = new(0, 0, 0);
 	/// <summary>Items</summary>

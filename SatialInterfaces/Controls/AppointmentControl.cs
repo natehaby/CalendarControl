@@ -46,6 +46,18 @@ public interface IAppointmentControl : ILogical, IDataContextProvider, ISelectab
 	/// <returns>True if it is and false otherwise</returns>
 	bool IsInDay(DateTime dateTime);
 	/// <summary>
+	/// Checks if this instance is in the given range
+	/// </summary>
+	/// <param name="start">The starting time</param>
+	/// <param name="end">The ending time</param>
+	bool IsInRange(DateTime start, DateTime end);
+	/// <summary>
+	/// Checks if this instance is in the given range
+	/// </summary>
+	/// <param name="start">The starting time</param>
+	/// <param name="duration">The duration to check</param>
+	bool IsInRange(DateTime start, TimeSpan duration);
+	/// <summary>
 	/// Checks if this instance is valid
 	/// </summary>
 	/// <returns>True if it is and false otherwise</returns>
@@ -101,7 +113,11 @@ public class AppointmentControl : Border, IAppointmentControl
 	}
 
 	/// <inheritdoc />
-	public bool IsValid()
+	public bool IsInRange(DateTime begin, DateTime end) => Begin >= begin && End <= end;
+    public bool IsInRange(DateTime start, TimeSpan duration) => IsInRange(start, start.Add(duration));
+
+    /// <inheritdoc />
+    public bool IsValid()
 	{
 		if (Begin == EmptyDateTime || End == EmptyDateTime)
 			return false;

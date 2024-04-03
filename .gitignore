@@ -6,6 +6,10 @@ project.lock.json
 *.pdf
 nupkg/
 
+# Visual Studio / Code
+.vs/
+.vscode/
+
 # User-specific files
 .idea/
 *.suo

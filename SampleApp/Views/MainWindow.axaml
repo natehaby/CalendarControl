@@ -5,7 +5,19 @@
     xmlns:si="clr-namespace:SatialInterfaces.Controls.Calendar;assembly=CalendarControl"
     xmlns:v="clr-namespace:SampleApp.Views" mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450" x:Class="SampleApp.Views.MainWindow" Title="SampleApp">
     <Grid Margin="8,8,8,8" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
-        <si:CalendarControl Name="CalendarControl" AutoScrollToSelectedItem="True" AllowDelete="True" Items="{Binding $parent[v:MainWindow].Items}" SelectionChanged="CalendarControlSelectionChanged" WeekendIsVisible="False">
+        <si:CalendarControl 
+			Name="CalendarControl" 
+			AutoScrollToSelectedItem="True" 
+			AllowDelete="True" 
+			Items="{Binding $parent[v:MainWindow].Items}" 
+			SelectionChanged="CalendarControlSelectionChanged" 
+            SelectedDate="{Binding Path=$parent[v:MainWindow].SelectedDate, Mode=TwoWay}"
+            Mode="{Binding Path=$parent[v:MainWindow].Mode, Mode=TwoWay}"
+            Days="{Binding Path=$parent[v:MainWindow].Days, Mode=TwoWay}"
+			AppointmentGroupMargin="10"
+			BeginOfTheDay="15"
+			EndOfTheDay="23"
+			>
             <Design.DataContext>
                 <v:AppointmentViewModel />
             </Design.DataContext>
@@ -24,6 +36,8 @@
             <Button Click="NextButtonClick">Next &gt;</Button>
             <Button Click="NewButtonClick">New</Button>
             <TextBlock Name="Info" VerticalAlignment="Center" />
+			<TextBlock Text="  |  " />
+			<TextBlock Text="{Binding Path=$parent[v:MainWindow].SelectedDate, Mode=OneWay}"/>
         </StackPanel>
         <StackPanel Grid.Row="0" Grid.Column="1" IsVisible="False">
             <CheckBox Content="Weekend is visible" IsChecked="{Binding #CalendarControl.WeekendIsVisible}" />

@@ -72,3 +72,20 @@ It's even better to specify the item template with binding to your view model
     </Grid>
 </Window>
 ````
+
+### Parameters for CalendarControl
+- **SelectedDate** - The date that is the focus of the calendar. (Default: Today)
+- **Mode** - The display mode. (Default: Week)
+  - *Week* - A standard 7 day week is displayed, with weekends.
+  - *Workweek* - A 5 day week is displayed
+  - *Day* - A number of days from 1-10 is displayed.
+- **Days** - The number of days to display when *Mode* is *Day*. (Default: 1)
+- **SelectedDatePosition** - In Day Mode, places the SelectedDate at the given position on the screen. (Default: Left)
+  - *Left* - The SelectedDate is the first date displayed (to the left).
+  - *Right* - The SelectedDate is the last date displayed (on the right).
+  - *Center* - The SelectedDate is placed in the center of displayed days. If the number of days shown is even, the SelectedDate will be right of center
+- **FirstDayOfWeek** - The first day of the week. (Default: Sunday)
+- **AllowDelete** - True if the user can delete items. (Default: True)
+- **SelectedIndex** - The index of the selected item. -1 for no item selected.
+- **SelectedItem** - An object representing the selected item. 
+- 
