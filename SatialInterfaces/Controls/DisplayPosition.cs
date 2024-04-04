@@ -5,7 +5,7 @@
 /// </summary>
 public enum DisplayPosition
 {
-	Left,
-	Center,
-	Right
+    Left,
+    Center,
+    Right,
 }
