@@ -37,7 +37,7 @@ public static class DoubleExtensions
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1611:Element parameters should be documented", Justification = "Extension Value")]
     public static bool IsGreaterThan(this double value, double other)
     {
-        return value - other > double.Epsilon;
+        return (value - other) > double.Epsilon;
     }
 
     /// <summary>
@@ -46,9 +46,9 @@ public static class DoubleExtensions
     /// <param name="other">The number to compare the value to.</param>
     /// <returns>True if the value is greater than or equal to the other number.</returns>
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1611:Element parameters should be documented", Justification = "Extension Value")]
-    public static bool IsGreaterThanOrEqual(this double value, double other)
+    public static bool IsGreaterOrEqual(this double value, double other)
     {
-        return value.IsGreaterThan(other) || value.IsZero();
+        return value.IsGreaterThan(other) || value.IsEqual(other);
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public static class DoubleExtensions
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1611:Element parameters should be documented", Justification = "Extension Value")]
     public static bool IsLessThan(this double value, double other)
     {
-        return value - other < -double.Epsilon;
+        return (value - other) < -double.Epsilon;
     }
 
     /// <summary>
@@ -68,8 +68,8 @@ public static class DoubleExtensions
     /// <param name="other">The number to check against.</param>
     /// <returns>True if the value is less than or equal to the other number.</returns>
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1611:Element parameters should be documented", Justification = "Extension Value")]
-    public static bool IsLessThanOrEqual(this double value, double other)
+    public static bool IsLessOrEqual(this double value, double other)
     {
-        return value.IsLessThan(other) || value.IsZero();
+        return value.IsLessThan(other) || value.IsEqual(other);
     }
 }

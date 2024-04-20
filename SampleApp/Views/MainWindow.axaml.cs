@@ -86,7 +86,7 @@ public partial class MainWindow : Window
         set => SetAndRaise(ModeProperty, ref mode, value);
     }
     public static readonly DirectProperty<MainWindow, DisplayMode> ModeProperty = AvaloniaProperty.RegisterDirect<MainWindow, DisplayMode>(nameof(Mode), o => o.Mode, (o, v) => o.Mode = v);
-    DisplayMode mode = DisplayMode.WorkWeek;
+    DisplayMode mode = DisplayMode.Day;
 
     public int Days
     {

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Collections;
@@ -12,6 +13,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using SatialInterfaces.Factories;
@@ -207,6 +209,7 @@ public partial class CalendarControl : ContentControl
 
         DrawCalendar();
         UpdateItems(Items, SelectedIndex);
+        Debug.Write("Leaving constructor");
     }
 
     /// <summary>Occurs when selection changed</summary>
@@ -595,19 +598,19 @@ public partial class CalendarControl : ContentControl
             return;
         }
 
-        if (rect.Width < 0 || rect.Height < 0)
+        if (rect.Width.IsLessThan(0) || rect.Height.IsLessThan(0))
         {
             return;
         }
 
         var x = double.NaN;
         var y = double.NaN;
-        if (beginOfDay.TotalHours >= 0.0d && endOfDay.TotalHours < 24.0d && endOfDay > beginOfDay)
+        if (beginOfDay.TotalDays.IsGreaterOrEqual(0) && endOfDay.TotalDays.IsLessThan(24) && endOfDay > beginOfDay)
         {
-            var height = 1.0d / (endOfDay - beginOfDay).TotalHours * rect.Height;
+            var height = 1.0d / (endOfDay - beginOfDay).TotalDays * rect.Height;
             scrollableGrid.Height = height;
 
-            y = forceScroll || scrollViewerMain.Offset.Y.IsZero() ? beginOfDay.TotalHours * height : scrollViewerMain.Offset.Y;
+            y = forceScroll || scrollViewerMain.Offset.Y.IsZero() ? beginOfDay.TotalDays * height : scrollViewerMain.Offset.Y;
         }
         else
         {
@@ -734,6 +737,7 @@ public partial class CalendarControl : ContentControl
 
         DrawCalendar();
         UpdateItems(Items, SelectedIndex);
+        Debug.Write("End of SelectedDatechanged");
     }
 
     /// <summary>

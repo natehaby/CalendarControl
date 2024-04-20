@@ -14,9 +14,6 @@
             SelectedDate="{Binding Path=$parent[v:MainWindow].SelectedDate, Mode=TwoWay}"
             Mode="{Binding Path=$parent[v:MainWindow].Mode, Mode=TwoWay}"
             Days="{Binding Path=$parent[v:MainWindow].Days, Mode=TwoWay}"
-			AppointmentGroupMargin="10"
-			BeginOfTheDay="15"
-			EndOfTheDay="23"
 			>
             <Design.DataContext>
                 <v:AppointmentViewModel />
