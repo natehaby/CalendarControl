@@ -178,32 +178,32 @@ public partial class CalendarControl : ContentControl
         // Sanity checks
         if (itemsGrid is null)
         {
-            throw new NotImplementedException("ItemsGrid not found");
+            throw new XamlLoadException("ItemsGrid not found");
         }
 
         if (scrollViewerMain is null)
         {
-            throw new NotImplementedException("ScrollViewerMain not found");
+            throw new XamlLoadException("ScrollViewerMain not found");
         }
 
         if (scrollableGrid is null)
         {
-            throw new NotImplementedException("ScrollableGrid not found");
+            throw new XamlLoadException("ScrollableGrid not found");
         }
 
         if (weekGrid is null)
         {
-            throw new NotImplementedException("WeekGrid not found");
+            throw new XamlLoadException("WeekGrid not found");
         }
 
         if (dayGrid is null)
         {
-            throw new NotImplementedException("DayGrid not found");
+            throw new XamlLoadException("DayGrid not found");
         }
 
         if (hourGrid is null)
         {
-            throw new NotImplementedException("HourGrid not found");
+            throw new XamlLoadException("HourGrid not found");
         }
 #endif
 
